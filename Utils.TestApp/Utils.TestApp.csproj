@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Utils.Core\Utils.Core.csproj" />
+    <ProjectReference Include="..\Utils.Crypto\Utils.Crypto.csproj" />
   </ItemGroup>
 
 </Project>
