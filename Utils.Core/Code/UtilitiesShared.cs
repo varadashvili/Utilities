@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Reflection;
@@ -9,17 +10,16 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Threading;
-using System.Xml.Linq;
+using System.Threading.Tasks;
+
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 using NodaTime.Extensions;
 
 using Utils.Core.Classes;
-
 using Utils.Core.StaticData;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace Utils.Core.Code
 {
@@ -84,8 +84,29 @@ namespace Utils.Core.Code
         #region IO
         public static string GetFileTempPath(string FileExtention)
         {
+            if (!FileExtention.StartsWith('.'))
+            {
+                FileExtention = $".{FileExtention}";
+            }
+
             string filename = "Temp_" + DateTime.Now.ToShortDateString() +
                                       DateTime.Now.ToLongTimeString() + FileExtention;
+            filename = Path.GetInvalidFileNameChars().
+                Aggregate(filename, (current, c) => current.Replace(c.ToString(), "_"));
+            string filepath = Path.Combine(Path.GetTempPath(), filename);
+
+            return filepath;
+        }
+
+        public static string GetFileRandomPath(string FileExtention)
+        {
+            if (!FileExtention.StartsWith('.'))
+            {
+                FileExtention = $".{FileExtention}";
+            }
+
+            string filename = $"Temp_{Path.GetRandomFileName()}{FileExtention}";
+
             filename = Path.GetInvalidFileNameChars().
                 Aggregate(filename, (current, c) => current.Replace(c.ToString(), "_"));
             string filepath = Path.Combine(Path.GetTempPath(), filename);
@@ -461,5 +482,99 @@ namespace Utils.Core.Code
 
         #endregion
 
+
+        #region text compression
+        public static string CompressString(this string InputString)
+        {
+            string compressedString = null;
+
+            if (InputString.IsNotEmpty())
+            {
+                byte[] buffer = Encoding.UTF8.GetBytes(InputString);
+
+                byte[] gzBuffer = buffer.CompressString();
+
+                compressedString = Convert.ToBase64String(gzBuffer);
+            }
+
+            return compressedString;
+        }
+
+
+        public static byte[] CompressString(this byte[] InputData)
+        {
+            byte[] gzBuffer = null;
+
+            byte[] buffer = InputData;
+
+            if (buffer != null)
+            {
+                using (var ms = new MemoryStream())
+                {
+                    using (GZipStream zip = new GZipStream(ms, CompressionMode.Compress, true))
+                    {
+                        zip.Write(buffer, 0, buffer.Length);
+                    }
+
+                    ms.Position = 0;
+
+                    byte[] compressed = new byte[ms.Length];
+                    ms.Read(compressed, 0, compressed.Length);
+
+                    gzBuffer = new byte[compressed.Length + 4];
+                    Buffer.BlockCopy(compressed, 0, gzBuffer, 4, compressed.Length);
+                    Buffer.BlockCopy(BitConverter.GetBytes(buffer.Length), 0, gzBuffer, 0, 4);
+                }
+            }
+
+            return gzBuffer;
+        }
+
+
+        public static string DecompressString(this string InputCompressedString)
+        {
+            string decompressedString = null;
+
+            if (InputCompressedString.IsNotEmpty())
+            {
+                byte[] gzBuffer = Convert.FromBase64String(InputCompressedString);
+
+                byte[] buffer = gzBuffer.DecompressString();
+
+                decompressedString = Encoding.UTF8.GetString(buffer);
+            }
+
+            return decompressedString;
+        }
+
+
+        public static byte[] DecompressString(this byte[] InputCompressedData)
+        {
+            byte[] buffer = null;
+
+            byte[] gzBuffer = InputCompressedData;
+
+            if (gzBuffer != null)
+            {
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    int msgLength = BitConverter.ToInt32(gzBuffer, 0);
+
+                    ms.Write(gzBuffer, 4, gzBuffer.Length - 4);
+
+                    buffer = new byte[msgLength];
+
+                    ms.Position = 0;
+
+                    using (GZipStream zip = new GZipStream(ms, CompressionMode.Decompress))
+                    {
+                        zip.Read(buffer, 0, buffer.Length);
+                    }
+                }
+            }
+
+            return buffer;
+        }
+        #endregion
     }
 }
